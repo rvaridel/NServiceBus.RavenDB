@@ -51,15 +51,24 @@
 
             protected override void OnStart()
             {
-                timeToKeepDeduplicationData = Settings.GetOrDefault<TimeSpan?>("Outbox.TimeToKeepDeduplicationData") ?? TimeSpan.FromDays(7);
-
                 var frequencyToRunDeduplicationDataCleanup = Settings.GetOrDefault<TimeSpan?>("Outbox.FrequencyToRunDeduplicationDataCleanup") ?? TimeSpan.FromMinutes(1);
+                if (frequencyToRunDeduplicationDataCleanup == Timeout.InfiniteTimeSpan)
+                {
+                    return;
+                }
+
+                timeToKeepDeduplicationData = Settings.GetOrDefault<TimeSpan?>("Outbox.TimeToKeepDeduplicationData") ?? TimeSpan.FromDays(7);
 
                 cleanupTimer = new Timer(PerformCleanup, null, TimeSpan.FromMinutes(1), frequencyToRunDeduplicationDataCleanup);
             }
 
             protected override void OnStop()
             {
+                if (cleanupTimer == null)
+                {
+                    return;
+                }
+
                 using (var waitHandle = new ManualResetEvent(false))
                 {
                     cleanupTimer.Dispose(waitHandle);
