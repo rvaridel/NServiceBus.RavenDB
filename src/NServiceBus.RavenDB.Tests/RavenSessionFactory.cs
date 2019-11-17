@@ -20,7 +20,6 @@
         IAsyncDocumentSession OpenAsyncSession()
         {
             var documentSession = store.OpenAsyncSession();
-            documentSession.Advanced.UseOptimisticConcurrency = true;
             return documentSession;
         }
 

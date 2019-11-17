@@ -4,9 +4,11 @@
     using System.Threading.Tasks;
     using NServiceBus.Extensibility;
     using NServiceBus.Outbox;
+    using NServiceBus.Persistence.RavenDB.SessionManagement;
     using NServiceBus.RavenDB.Outbox;
     using NServiceBus.Transport;
     using Raven.Client.Documents;
+    using Raven.Client.Documents.Operations.CompareExchange;
     using Raven.Client.Documents.Session;
     using TransportOperation = NServiceBus.Outbox.TransportOperation;
 
@@ -55,14 +57,14 @@
         {
             var session = GetSession(context);
 
-            session.Advanced.UseOptimisticConcurrency = true;
+            session.Advanced.SetTransactionMode(TransactionMode.ClusterWide);
 
             context.Set(session);
             var transaction = new RavenDBOutboxTransaction(session);
             return Task.FromResult<OutboxTransaction>(transaction);
         }
 
-        public Task Store(OutboxMessage message, OutboxTransaction transaction, ContextBag context)
+        public async Task Store(OutboxMessage message, OutboxTransaction transaction, ContextBag context)
         {
             var session = ((RavenDBOutboxTransaction)transaction).AsyncSession;
 
@@ -81,19 +83,29 @@
                 index++;
             }
 
-            return session.StoreAsync(new OutboxRecord
+            var outboxRecordId = GetOutboxRecordId(message.MessageId);
+            var changeVector = string.Empty;
+
+            if (session.IsClusterWideTransaction())
+            {
+                changeVector = null;
+                session.Advanced.ClusterTransaction.UpdateCompareExchangeValue(
+                    new CompareExchangeValue<string>(outboxRecordId, 0, message.MessageId));
+            }
+            
+            await session.StoreAsync(new OutboxRecord
             {
                 MessageId = message.MessageId,
                 Dispatched = false,
                 TransportOperations = operations
-            }, GetOutboxRecordId(message.MessageId));
+            }, changeVector, outboxRecordId).ConfigureAwait(false);
         }
 
         public async Task SetAsDispatched(string messageId, ContextBag options)
         {
             using (var session = GetSession(options))
             {
-                session.Advanced.UseOptimisticConcurrency = true;
+                session.Advanced.SetTransactionMode(TransactionMode.ClusterWide);
 
                 var outboxMessage = await session.LoadAsync<OutboxRecord>(GetOutboxRecordId(messageId)).ConfigureAwait(false);
                 if (outboxMessage == null || outboxMessage.Dispatched)

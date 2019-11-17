@@ -36,7 +36,6 @@
         protected internal IAsyncDocumentSession OpenAsyncSession()
         {
             var documentSession = store.OpenAsyncSession();
-            documentSession.Advanced.UseOptimisticConcurrency = true;
             sessions.Add(documentSession);
             return documentSession;
         }

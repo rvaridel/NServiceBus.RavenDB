@@ -33,8 +33,6 @@ namespace NServiceBus.Persistence.RavenDB
         {
             using (var session = documentStore.OpenAsyncSession())
             {
-                session.Advanced.UseOptimisticConcurrency = true;
-
                 var timeout = await session.LoadAsync<Timeout>(timeoutId).ConfigureAwait(false);
                 if (timeout == null)
                 {

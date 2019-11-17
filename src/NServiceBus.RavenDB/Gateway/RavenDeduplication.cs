@@ -18,8 +18,6 @@
         {
             using (var session = documentStore.OpenAsyncSession())
             {
-                session.Advanced.UseOptimisticConcurrency = true;
-
                 await session.StoreAsync(new GatewayMessage
                 {
                     Id = EscapeMessageId(messageId),

@@ -14,6 +14,7 @@
         /// <param name="session"></param>
         public TestableRavenStorageSession(IAsyncDocumentSession session)
         {
+            session.Advanced.SetTransactionMode(TransactionMode.ClusterWide);
             Session = session;
         }
 

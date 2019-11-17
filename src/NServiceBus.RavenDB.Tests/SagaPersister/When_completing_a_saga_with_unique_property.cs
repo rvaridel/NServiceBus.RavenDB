@@ -26,11 +26,11 @@ public class When_completing_a_saga_with_unique_property : RavenDBPersistenceTes
         var synchronizedSession = new RavenDBSynchronizedStorageSession(session);
 
         await persister.Save(entity, this.CreateMetadata<SomeSaga>(entity), synchronizedSession, options);
-        await session.SaveChangesAsync().ConfigureAwait(false);
+        await synchronizedSession.Session.SaveChangesAsync().ConfigureAwait(false);
 
         var saga = await persister.Get<SagaData>(sagaId, synchronizedSession, options);
         await persister.Complete(saga, synchronizedSession, options);
-        await session.SaveChangesAsync().ConfigureAwait(false);
+        await synchronizedSession.Session.SaveChangesAsync().ConfigureAwait(false);
 
         Assert.Null(await persister.Get<SagaData>(sagaId, synchronizedSession, options));
         Assert.Null(await session.Query<SagaUniqueIdentity>().Customize(c => c.WaitForNonStaleResults()).SingleOrDefaultAsync(u => u.SagaId == sagaId).ConfigureAwait(false));

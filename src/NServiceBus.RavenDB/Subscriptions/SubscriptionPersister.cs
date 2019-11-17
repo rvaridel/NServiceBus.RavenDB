@@ -179,7 +179,6 @@ namespace NServiceBus.Persistence.RavenDB
         IAsyncDocumentSession OpenAsyncSession()
         {
             var session = documentStore.OpenAsyncSession();
-            session.Advanced.UseOptimisticConcurrency = true;
             return session;
         }
 

@@ -20,6 +20,7 @@ namespace NServiceBus.Persistence.RavenDB
         /// <param name="session">The transaction to wrap</param>
         public RavenDBSynchronizedStorageSession(IAsyncDocumentSession session)
         {
+            session.Advanced.SetTransactionMode(TransactionMode.ClusterWide);
             Session = session;
         }
 

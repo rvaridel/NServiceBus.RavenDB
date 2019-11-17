@@ -17,8 +17,6 @@
         {
             var session = getAsyncSessionUsingHeaders(messageHeaders);
 
-            session.Advanced.UseOptimisticConcurrency = true;
-
             return session;
         }
     }
