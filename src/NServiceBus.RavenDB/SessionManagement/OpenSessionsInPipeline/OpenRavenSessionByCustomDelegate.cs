@@ -17,6 +17,8 @@
         {
             var session = getAsyncSessionUsingHeaders(messageHeaders);
 
+            session.Advanced.SetTransactionMode(TransactionMode.ClusterWide);
+
             return session;
         }
     }

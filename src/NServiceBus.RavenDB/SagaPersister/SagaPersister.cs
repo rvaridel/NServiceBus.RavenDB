@@ -3,11 +3,9 @@ namespace NServiceBus.Persistence.RavenDB
     using System;
     using System.Threading.Tasks;
     using NServiceBus.Extensibility;
-    using NServiceBus.Persistence.RavenDB.SessionManagement;
     using NServiceBus.RavenDB.Persistence.SagaPersister;
     using NServiceBus.Sagas;
     using Raven.Client.Documents;
-    using Raven.Client.Documents.Commands.Batches;
     using Raven.Client.Documents.Session;
 
     class SagaPersister : ISagaPersister
@@ -40,7 +38,8 @@ namespace NServiceBus.Persistence.RavenDB
                 changeVector = null;
                 documentSession.Advanced.ClusterTransaction.CreateCompareExchangeValue(container.IdentityDocId, container.Id);
             }
-            
+
+            await documentSession.StoreAsync(container, changeVector, container.Id).ConfigureAwait(false);
             await documentSession.StoreAsync(new SagaUniqueIdentity
             {
                 Id = container.IdentityDocId,
@@ -89,17 +88,26 @@ namespace NServiceBus.Persistence.RavenDB
             {
                 documentSession.Advanced.Evict(lookup);
 
-                // If we have a saga id we can just load it, should have been included in the round-trip already
-                var container = await documentSession.LoadAsync<SagaDataContainer>(lookup.SagaDocId).ConfigureAwait(false);
-
-                if (container != null)
+                if (lookup.SagaDocId != null)
                 {
-                    if (container.IdentityDocId == null)
+                    // If we have a saga id we can just load it, should have been included in the round-trip already
+                    var container = await documentSession.LoadAsync<SagaDataContainer>(lookup.SagaDocId).ConfigureAwait(false);
+
+                    if (container != null)
                     {
-                        container.IdentityDocId = lookupId;
+                        if (container.IdentityDocId == null)
+                        {
+                            container.IdentityDocId = lookupId;
+                        }
+                        context.Set($"{SagaContainerContextKeyPrefix}{container.Data.Id}", container);
+                        return container.Data as T;
                     }
-                    context.Set($"{SagaContainerContextKeyPrefix}{container.Data.Id}", container);
-                    return (T)container.Data;
+                }
+                else
+                {
+                    // TODO: I (David) don't get this...
+                    //if not this is a saga that was created pre 3.0.4 so we fallback to a get instead
+                    return await Get<T>(lookup.SagaId, session, context).ConfigureAwait(false);
                 }
             }
 
@@ -109,10 +117,9 @@ namespace NServiceBus.Persistence.RavenDB
         public async Task Complete(IContainSagaData sagaData, SynchronizedStorageSession session, ContextBag context)
         {
             var documentSession = session.RavenSession();
-            
             var container = context.Get<SagaDataContainer>($"{SagaContainerContextKeyPrefix}{sagaData.Id}");
             documentSession.Delete(container);
-            
+
             if (container.IdentityDocId != null)
             {
                 documentSession.Delete(container.IdentityDocId);

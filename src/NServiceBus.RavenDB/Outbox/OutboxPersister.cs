@@ -1,14 +1,13 @@
 ﻿namespace NServiceBus.Persistence.RavenDB
 {
     using System;
+    using System.Linq;
     using System.Threading.Tasks;
     using NServiceBus.Extensibility;
     using NServiceBus.Outbox;
-    using NServiceBus.Persistence.RavenDB.SessionManagement;
     using NServiceBus.RavenDB.Outbox;
     using NServiceBus.Transport;
     using Raven.Client.Documents;
-    using Raven.Client.Documents.Operations.CompareExchange;
     using Raven.Client.Documents.Session;
     using TransportOperation = NServiceBus.Outbox.TransportOperation;
 
@@ -27,8 +26,9 @@
             using (var session = GetSession(options))
             {
                 // We use Load operation and not queries to avoid stale results
-                var outboxDocId = GetOutboxRecordId(messageId);
-                result = await session.LoadAsync<OutboxRecord>(outboxDocId).ConfigureAwait(false);
+                var possibleIds = GetPossibleOutboxDocumentIds(messageId);
+                var docs = await session.LoadAsync<OutboxRecord>(possibleIds).ConfigureAwait(false);
+                result = docs.Values.FirstOrDefault(o => o != null);
             }
 
             if (result == null)
@@ -57,14 +57,12 @@
         {
             var session = GetSession(context);
 
-            session.Advanced.SetTransactionMode(TransactionMode.ClusterWide);
-
             context.Set(session);
             var transaction = new RavenDBOutboxTransaction(session);
             return Task.FromResult<OutboxTransaction>(transaction);
         }
 
-        public async Task Store(OutboxMessage message, OutboxTransaction transaction, ContextBag context)
+        public Task Store(OutboxMessage message, OutboxTransaction transaction, ContextBag context)
         {
             var session = ((RavenDBOutboxTransaction)transaction).AsyncSession;
 
@@ -89,25 +87,23 @@
             if (session.IsClusterWideTransaction())
             {
                 changeVector = null;
-                session.Advanced.ClusterTransaction.UpdateCompareExchangeValue(
-                    new CompareExchangeValue<string>(outboxRecordId, 0, message.MessageId));
+                session.Advanced.ClusterTransaction.CreateCompareExchangeValue(outboxRecordId, message.MessageId);
             }
-            
-            await session.StoreAsync(new OutboxRecord
+
+            return session.StoreAsync(new OutboxRecord
             {
                 MessageId = message.MessageId,
                 Dispatched = false,
                 TransportOperations = operations
-            }, changeVector, outboxRecordId).ConfigureAwait(false);
+            }, changeVector, outboxRecordId);
         }
 
         public async Task SetAsDispatched(string messageId, ContextBag options)
         {
             using (var session = GetSession(options))
             {
-                session.Advanced.SetTransactionMode(TransactionMode.ClusterWide);
-
-                var outboxMessage = await session.LoadAsync<OutboxRecord>(GetOutboxRecordId(messageId)).ConfigureAwait(false);
+                var docs = await session.LoadAsync<OutboxRecord>(GetPossibleOutboxDocumentIds(messageId)).ConfigureAwait(false);
+                var outboxMessage = docs.Values.FirstOrDefault(o => o != null);
                 if (outboxMessage == null || outboxMessage.Dispatched)
                 {
                     return;
@@ -130,6 +126,18 @@
             }
 
             return documentStore.OpenAsyncSession();
+        }
+
+        // TODO: Should get rid of this as part of the 6.0 breaking changes
+        string[] GetPossibleOutboxDocumentIds(string messageId)
+        {
+            return new[]
+            {
+                // Current format, already replaces \ with _
+                GetOutboxRecordId(messageId),
+                // Legacy format without endpoint id
+                $"Outbox/{messageId.Replace('\\', '_')}"
+            };
         }
 
         string GetOutboxRecordId(string messageId) => $"Outbox/{endpointName}/{messageId.Replace('\\', '_')}";

@@ -1,8 +1,8 @@
-﻿using System;
-using Raven.Client.Documents.Session;
-
-namespace NServiceBus.Persistence.RavenDB.SessionManagement
+﻿namespace NServiceBus.Persistence.RavenDB
 {
+    using System;
+    using Raven.Client.Documents.Session;
+
     static class DocumentSessionExtensions
     {
         public static bool IsClusterWideTransaction(this IAsyncDocumentSession session)

@@ -22,6 +22,8 @@
                 ? documentStoreWrapper.DocumentStore.OpenAsyncSession()
                 : documentStoreWrapper.DocumentStore.OpenAsyncSession(databaseName);
 
+            documentSession.Advanced.SetTransactionMode(TransactionMode.ClusterWide);
+
             return documentSession;
         }
     }
